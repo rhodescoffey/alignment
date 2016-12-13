@@ -1,0 +1,206 @@
+-------------------------------------------------------------------------------
+ALIGNMENT
+-------------------------------------------------------------------------------
+aligment contains all of the files necessary to run the annotation aligner and
+produce comparisons of different annotator's work.
+
+--Files--
+align_funcs.py
+tg.py
+phonemes.py
+aligner.py
+sound_extract.py
+out_to_file.py
+
+
+NOTE: All relevant TextGrids/.wav files are stored in files with the naming
+      convention LANGUAGE_TG (e.g. CHIN_TG, SPAN_TG). For additional language
+      handling, additional files must be added, and appropriate additions must
+      be made to phonemes.py, which can be made by following already existing
+      conventions in the file. All other files should work on new languages
+      following these changes. For more information please see phonemes.py.
+
+-------------------------------------------------------------------------------
+CONTENTS
+-------------------------------------------------------------------------------
+The following files can be found in the current directory:
+
+align_funcs.py
+    align_funcs contains the alignment algorithm that compares two input
+    annotations. The comparison is conducted by computing the Levenshthein 
+    Distance between the text of each annotation. The output is two new
+    strings, each preserving sequences of letters that either match (e.g. 
+    S1='gow', S2='gow') or are of the same length with matching consonant/vowel
+    insertions (e.g. S1='gow', S2='kou'), and inserting _'s where one
+    annotation contains more information that the other (e.g. S1='gow',
+    S2='go_'). The function also returns the necessary number of edits needed
+    to create S1 from S2 (e.g. ED of 'gow' and 'kou' would be 2, because 2
+    letters must be replaced to arrive at 'kou' from 'gou', and vice versa), as
+    well as the grid constructed to arrive at this conclusion, represented as
+    as list of lists (for more information on computing ED and dynamic
+    programming in general, Wikipedia has articles on both dynamic programming
+    and Levenshtein distance). This file also contains functions that check
+    whether or not each letter in the annotation is either a consonant or a
+    vowel, according to the annotation scheme (for the scheme used in this
+    project, see phonemes.py), and whether or not two letters do not belong to
+    the same category.
+
+tg.py
+    tg (or TextGrid) reads through the TextGrid file format output in Praat and
+    extracts relevant information for alignment (string-phonemes,
+    intervals-time). TextGrid file formats created in Praat are relatively
+    uniform, and the information can usually be extracted with ease. TextGrids
+    are typically encoded in either "regular" or "short" formats, both of
+    which are handled. The extractor outputs a new "TextGrid" object that can
+    be read by the aligner. The TextGrid is divided into sub-objects called
+    Tiers, each of which contains a phoneme and the time interval in which it
+    occurs. tg also contains a mapping function replace_all() that changes
+    each phonemes that cannot be read by the aligner (e.g. multi-char strings,
+    because the aligner depends on pairwise comparison of individual
+    characters) into a readable format (e.g. @ --> 1). Each TextGrid is also
+    stripped of unreadable noise, such as additional characters or markers for
+    irrelevant features, like nasalization.
+    NOTE: There are some TextGrid formats that cannot be read by this
+    extractor. For these, open the file in Praat and re-save it. This should
+    fix any extraction issues. Also, problems with extraction might occur if
+    the annotators used irregular characters in their annotation. I have found
+    this most often in the Chinese TextGrids, in which annotators forget to
+    switch from a Pinyin keyboard to an English keyboard, resulting in
+    unreadable variants of characters such as @. Open the TextGrid files in
+    either vim/emacs or Praat to find these characters. As is, the extractor
+    can read any characters encoded in utf-8/16. Errors will also occur if
+    multiple characters (that are NOT in the phonemes file dictionaries 
+    already) are used to annotate single phonemes.
+
+phonemes.py
+    phonemes contains relevant information about the phonemes being handled
+    in the alignment operations. This includes information about which
+    multi-char and single-char sequences that are encountered in each language,
+    a list of consonants and vowels, as well as the pathnames of files
+    containing TextGrids. Each of these components is coded by language in the
+    file to allow the aligner and other functions to work without language
+    specific conditionals. phonemes.py also contains a list of "noise"
+    characters that are added as a convention (e.g. to mark nasalization of
+    a vowel, to indicate uncertainty about the character) that are to be
+    stripped from the TextGrids when conducting pairwise alignment. Two
+    dictionary structures are used in each language to map annotated phonemes
+    to the conventions used by the aligner: multi-char replacements and single
+    char replacements, the former of which must precede the latter. Mapping is
+    handled in the aligner with the MAPPING dictionary. It is important that
+    MAPPING files be updated according to the annotation conventions of the
+    annotators. If an annotator makes a mistake in annotation, it is acceptable
+    to change it in the TextGrid file, save your changes. However, if it is a
+    convention adopted by multiple annotators, it is more convenient to simply
+    replace the character via MAPPING and the appropriate functions in the
+    aligner. Note that the file headers must be specified in phonemes, and 
+    changed according to how the textgrid files are titled.
+
+aligner.py
+    The aligner outputs an .xlsx file containing every pairwise comparison of
+    aligned TextGrid phoneme/time sequences. Its use will be explained in the
+    next section.
+
+sound_extract.py
+    The sound extractor requires the .xlsx file produced by the aligner, as
+    well as all the .wav files corresponding to each TextGrid aligned. The
+    extractor checks the start and end times of each vowel in each TextGrid,
+    applies a "pad" to ensure the times do not cut the vowel short, and cuts
+    the vowel from the .wav file using the times taken from the .xlsx file.
+    Note that the only vowels extracted are those that at least two annotators
+    agree on. For example, if both annotators label the vowel during the same
+    point in the .wav file "a," the extractor will produce a new .wav file of
+    just that vowel. However, if one annotator labels it "@," the extractor
+    will not create a .wav file from that vowel. The purpose of this program
+    is to extract "exemplary" vowels from the TextGrid sound files to serve as
+    a resource to annotators in making judgements about vowel identity: this
+    should serve to increase the uniformity of annotations in the future. The
+    minimum duration needed for the program to extract a vowel can be changed
+    by changing the global LIM, which by default has been set to 0.1.
+    Note: The .wav files need to be stored in a directory called "sound_files." 
+    Relevant path names can be found in the program itself as globals, and can
+    be changed if necessary.
+
+out_to_file.py
+    Outputs the results of the vowel extractions in a .txt file. The .txt file
+    is produced by searching the sounds file produced by the extractor, and
+    totalling how many of each vowel was found. All that needs to be specified
+    is the minimum duration of any vowel analyzed and the language of the TG.
+
+-------------------------------------------------------------------------------
+HOW TO USE aligner.py
+-------------------------------------------------------------------------------
+The aligner has been constructed specifically for the purposes of comparing
+files with a fixed format. The files must be either UTF8 or UTF16 encoded,
+which can be achieved by saving a TextGrid as a TextFile in Praat. The file
+name convention must also be as follows: Ch9_BabyC_3_FILENUM_ANNSIG.TextGrid,
+where FILENUM corresponds to the file number, and the ANNSIG the signature of
+the annotator. As of now the aligner works with both Chinese and Spanish
+annotations. Changes can be made by altering the phonemes.py file. It is 
+assumed that the TextGrids are stored in files LANG_TG, where LANG is the
+language signature (e.g. CHIN for Chinese, SPAN for Spanish).
+
+To run comparisons between files in a directory, type the following into the
+terminal when you have reached the working directory...
+
+>>> python aligner.py LANG START END
+
+... where LANG is the language signature, and START and END correspond to the
+range of files you wish to compare, i.e. the smallest file number and the
+largest. The output is a .csv file that can be opened in Excel titled:
+"Ann_Alignment_START_END.csv", where START and END correspond to the input.
+This file is organized as follows...
+
+File1  Ann1  Ann1_Phonemes  Ann1_Time  File2  Ann2  Ann2_Phonemes  Ann2_Time
+
+... where File1 and File2 are the TextGrids being compared, Ann1 and Ann2 are
+the respective annotators' signatures, and Ann1/2_Phonemes/Time correspond to
+the letters of the edited annotation text and how they match the time intervals
+in the original annotation.
+
+-------------------------------------------------------------------------------
+HOW TO ADD LANGUAGES TO aligner.py
+-------------------------------------------------------------------------------
+The aligner is written such that all language parameters can be specified
+directly: nothing is hard-coded into the methods in the aligner or any of its
+constituent files. This flexibility is enabled by phonemes.py, which makes use
+of Python's dictionary structures to map the language code to the appropriate
+data. This language code is preferably a 4-char entry in each of the dictionary
+structures that maps to various data (VOWELS, CONSONANTS, FILE_HEADERS, etc.).
+As of this update, there are two languages enabled by the aligner: Spanish
+(SPAN) and Mandarin Chinese (CHIN). In order to add a language to the aligner's
+functionality, all changes can be made in phonemes.py. Let us say we have
+started annotating French speech, and want to collect data on the conventions
+of the annotators. First, we would need to specify all characters used in the
+annotation. To do this, we would add a FREN entry to CONSONANTS and VOWELS,
+and include a string of all of the characters used in annotation. We would
+then add an entry in FILE_HEADERS, and specify the path used to get to the
+FREN TextGrids, as well as the headers used to name each TextFile. We could
+then add an entry in SIGNATURES, to which we would map a list of signatures
+provided by each annotator on the filename. After, we must then code for all
+unnecessary information the annotators might provide in their annotations.
+If the current annotations add additional information about vowels in a way
+not already specified by the string NOISE, add the characters used to NOISE.
+The next step will be to specify which characters used by the annotators must be
+replaced during alignment. Note that the aligner works through a pairwise
+analysis of strings. Because of this, it is impossible to run if phonemes are
+labelled with more than one character. All phonemes that are labelled in such a
+way can be mapped to single characters by adding a [FREN]_MLTI dictionary to
+phonemes.py. Other information that will be swapped here include laughter and
+silence, both of which are presented represented as dashes ('-') for the purpose
+of alignment. If additional characters need to be replaced for the sake of
+uniformity, or if some mappings in MLTI overlap (e.g. 'sil' and 'silent'), these
+can be specified in a [FREN]_SG dictionary. When these are completed, an
+appropriate entry can be made to MAPPING. Developing an efficient MAPPING system
+requires testing and debugging, as well as determining whether an abberant
+character is a singular mistake. in which case the TextGrid can be changed. or a
+convention by a single/multiple annotators not specified in the standard
+annotation conventions. 
+
+-------------------------------------------------------------------------------
+CREDITS
+-------------------------------------------------------------------------------
+The aligner was created by Joseph Coffey while working in the lab of Dr. Daniel
+Swingley at the Penn Infant Language Center, a lab in Institute for Research in
+Cognitive Science at the University of Pennsylvania.
+
+Updated as of 3/1/16
